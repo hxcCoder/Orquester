@@ -1,44 +1,43 @@
-## NORTHSTAR 1.1.0
+NORTHSTAR 1.2.0
 Recon Orchestrator — Project Charter, Architecture & Engineering Baseline
-- Versión: 1.1.0
-- Fecha: 2026-11-12
-- Estado: Baseline arquitectónico final para implementación verificable
-- Clasificación: Herramienta local para reconocimiento autorizado y reproducible
-- Documento: Fuente de verdad del diseño; las decisiones aceptadas se registran además como ADR.
+Versión: 1.2.0
+Fecha: 2026-11-12
+Estado: Baseline arquitectónico final, verificado y listo para implementación
+Clasificación: Herramienta local para reconocimiento autorizado y reproducible
+Documento: Fuente de verdad del diseño; las decisiones aceptadas se registran además como ADR.
 
 Importante: Este documento define una arquitectura y criterios de aceptación. No afirma que exista una implementación funcional ni que las garantías estén verificadas hasta que el código, las pruebas y la evidencia de ejecución las demuestren.
 
-0. ### Resumen ejecutivo
-*Northstar es un orquestador CLI modular de reconocimiento de activos para programas de bug bounty con autorización explícita y laboratorios/CTFs. Su propósito es ejecutar workflows declarativos, conectar herramientas mediante contratos tipados, conservar evidencia, mantener historial y detectar cambios verificables.*
+0. Resumen ejecutivo
+Northstar es un orquestador CLI modular de reconocimiento de activos para programas de bug bounty con autorización explícita y laboratorios/CTFs. Su propósito es ejecutar workflows declarativos, conectar herramientas mediante contratos tipados, conservar evidencia, mantener historial y detectar cambios verificables.
 
-## Northstar no es un wrapper de comandos ni un escáner indiscriminado. Es un motor de workflows con:
+Northstar no es un wrapper de comandos ni un escáner indiscriminado. Es un motor de workflows con:
 
-- configuración declarativa y validación estricta a todos los niveles de anidamiento;
+configuración declarativa y validación estricta a todos los niveles de anidamiento;
 
-- autorización y control de scope antes y durante la ejecución;
+autorización y control de scope antes y durante la ejecución;
 
-- planificación determinista de DAG;
+planificación determinista de DAG;
 
-- ejecución asíncrona con límites, cancelación y limpieza verificable de árboles de procesos;
+ejecución asíncrona con límites, cancelación y limpieza verificable de árboles de procesos;
 
-- adapters desacoplados y versionados;
+adapters desacoplados y versionados;
 
-- artefactos inmutables y verificables;
+artefactos inmutables y verificables;
 
-- persistencia histórica con SQLite y writer único con cola acotada;
+persistencia histórica con SQLite y writer único con cola acotada;
 
-- -cobertura explícita y diff conservador;
+cobertura explícita y diff conservador;
 
-- pruebas automatizadas y recuperación ante fallos.
+pruebas automatizadas y recuperación ante fallos.
 
 Estado de madurez
 Nivel	Estado
-Arquitectura	Definida y corregida en este documento
+Arquitectura	Definida, corregida y verificada en este documento
 Contratos	Propuestos; deben implementarse
 MVP	No declarado completo
 Seguridad	No certificada; requiere pruebas y revisión
 Producción	No habilitada hasta cumplir DoD y gates
-
 1. Visión, alcance y límites
 1.1 Visión
 Construir una herramienta local, extensible y reproducible que permita definir reconocimiento autorizado como workflows declarativos, ejecutar herramientas de manera controlada, almacenar evidencia y comparar observaciones históricas sin producir conclusiones falsas.
@@ -115,7 +114,7 @@ Deterministic validation: errores estructurales y semánticos se detectan antes 
 
 Least privilege: no se requieren privilegios elevados; ejecutables y permisos se verifican.
 
-No shell: procesos externos se invocan con argv, nunca con shell=True.
+No shell: procesos externos se invocan con argv, nunca con shell=True. asyncio.create_subprocess_exec es la única vía permitida.
 
 Recoverability: un run interrumpido se recupera como incompleto, nunca como exitoso por defecto.
 
@@ -290,7 +289,7 @@ Pydantic v2 valida modelos con modo estricto.
 
 extra="forbid" en modelos de configuración.
 
-extra="forbid" y strict=True deben aplicarse explícitamente a cada modelo anidado; no se heredan recursivamente del modelo padre. El loader debe verificar que ningún submodelo de scope, authorization, workflow o adapter params quede sin estas directivas. Un test de CI debe recorrer los modelos y fallar si encuentra un BaseModel sin model_config estricta en la jerarquía de configuración.
+La estrictitud no es recursiva por defecto en Pydantic v2. extra="forbid" y strict=True deben declararse explícitamente en cada modelo anidado (ConfigDict(extra="forbid", strict=True)). El loader debe recorrer la jerarquía de modelos y fallar si algún BaseModel de configuración carece de estas directivas. Un test de CI es obligatorio.
 
 No se permite eval, ejecución de templates arbitrarios ni interpolación de shell.
 
@@ -391,7 +390,7 @@ modules:
       schema: authorized_hostname_v1
       artifact_type: authorized_hostname
     on_out_of_scope: mark
-module_kind: tool indica que el nodo spawnea un proceso. module_kind: policy indica que el nodo ejecuta lógica pura del motor (ver §6.6). Esta distinción es obligatoria y afecta cómo el planner valida, cómo el scheduler ejecuta y cómo se registra el NodeExecution.
+module_kind: tool indica que el nodo spawnea un proceso. module_kind: policy indica que el nodo ejecuta lógica pura del motor (ver §6.6). Esta distinción es estructural y afecta cómo el planner valida, cómo el scheduler ejecuta y cómo se registra el NodeExecution.
 
 Este YAML es un ejemplo de contrato, no una configuración universal lista para ejecutar. Cada adapter debe comprobar que los argumentos son compatibles con la versión instalada y con la política de scope.
 
@@ -458,7 +457,7 @@ Los valores que comiencen con - no se insertan en argumentos posicionales sin va
 
 Se usa -- cuando la herramienta lo soporta y el contrato lo permite.
 
-Registro de decisión futura (ADR pendiente): PEP 787 propone t-strings para subprocess y shlex, con objetivo en Python 3.15. Cuando la versión mínima soportada lo permita, evaluar su adopción sin abandonar la lista de argumentos como mecanismo primario.
+PEP 787 propone t-strings para subprocess y shlex con objetivo en Python 3.15. No se adopta en el MVP. Cuando la versión mínima soportada lo permita, se evaluará su adopción sin abandonar la lista de argumentos como mecanismo primario.
 
 5.5 Namespaces y orden de resolución
 Los templates operan sobre tres namespaces explícitos y mutuamente excluyentes. Un template que referencia un namespace no declarado falla en validación, no en ejecución.
@@ -698,7 +697,7 @@ No se amplía scope automáticamente.
 Se registran las decisiones de autorización.
 
 8.3 DNS y pinning
-Una validación DNS seguida de una resolución independiente por una herramienta externa no garantiza pinning.
+Una validación DNS seguida de una resolución independiente por una herramienta externa no garantiza pinning. OWASP es explícito: validar los nombres no detiene el DNS rebinding; hay que validar las IPs resueltas y conectar solo a esas IPs validadas, preservando el hostname para Host, SNI y verificación de certificado.
 
 El contrato debe distinguir:
 
@@ -725,7 +724,7 @@ no afirmar protección completa contra DNS rebinding;
 preferir adapters que permitan resolver, fijar y conectar de forma controlada.
 
 8.3.1 Protocolo de verificación de red del adapter
-Para que la garantía de “destino validado” sea verificable y no solo declarativa, cada adapter tool que realice conexiones de red debe producir, por cada request u operación relevante, un NetworkEvidenceRecord con los siguientes campos, que se adjunta a la observación y cuyo hash agregado se incluye en el Coverage record del nodo:
+Para que la garantía de “destino validado” sea verificable, cada adapter tool que realice conexiones de red debe producir un NetworkEvidenceRecord por cada request u operación relevante, adjunto a la observación y con su hash agregado en el Coverage record del nodo:
 
 text
 NetworkEvidenceRecord
@@ -808,7 +807,7 @@ Los secretos se referencian en templates como secret://nombre; el adapter resuel
 9.1 Requisitos
 asyncio.create_subprocess_exec(*argv).
 
-Nunca shell=True.
+Nunca shell=True. create_subprocess_shell es vulnerable a inyección de comandos; create_subprocess_exec recibe una lista de argumentos y evita la interpretación por el shell.
 
 Ejecutable absoluto verificado antes del spawn.
 
@@ -1518,7 +1517,7 @@ El MVP solo se considera listo cuando:
 19. ADR — decisiones arquitectónicas
 ADR	Decisión	Estado
 ADR-001	Buffered/artifact-based primero	Aceptada para MVP
-ADR-002	Pydantic v2 strict + extra forbid con aplicación recursiva verificada	Aceptada
+ADR-002	Pydantic v2 strict + extra forbid aplicado explícitamente a cada modelo anidado	Aceptada
 ADR-003	SQLite con writer único y cola acotada	Aceptada para MVP
 ADR-004	JSONL como intercambio cuando aplique	Propuesta
 ADR-005	Scope y autorización fail-closed	Obligatoria
@@ -1542,11 +1541,11 @@ Cada ADR debe registrar: contexto, decisión, alternativas, consecuencias, riesg
 20. Stack tecnológico
 Capa	Tecnología
 CLI	Typer
-Configuración	PyYAML + Pydantic v2 (strict + extra="forbid" recursivo)
+Configuración	PyYAML + Pydantic v2 (strict + extra="forbid" en cada modelo anidado)
 Runtime	asyncio
-Subprocess	asyncio subprocess
+Subprocess	asyncio.create_subprocess_exec
 DB	SQLite + aiosqlite
-XML	defusedxml con configuración endurecida
+XML	defusedxml con forbid_dtd=True, forbid_entities=True, forbid_external=True
 Logging	logging estructurado
 Terminal	Rich
 Tests	pytest + pytest-asyncio
@@ -1554,7 +1553,7 @@ Lint	Ruff
 Type checking	mypy o pyright (elegir uno y fijarlo)
 Packaging	pyproject.toml
 CI	GitHub Actions u otro runner equivalente
-Las versiones de Python y dependencias deben fijarse en pyproject.toml y lockfile. No se debe depender de versiones flotantes en releases reproducibles.
+Las versiones de Python y dependencias deben fijarse en pyproject.toml y lockfile. No se debe depender de versiones flotantes en releases reproducibles. Versión mínima recomendada: Python 3.12+.
 
 21. Seguridad operacional
 Northstar no solicita ni requiere privilegios root por defecto.
@@ -1644,8 +1643,9 @@ Versión	Fecha	Cambios
 0.1.0	2026-11-12	Documento fundacional
 0.2.0	2026-11-12	Scope, DNS pinning, cobertura, writer único, secretos, estados y manifests
 1.0.0	2026-11-12	Consolidación de contratos, planner determinista, máquina de estados, recuperación, integridad, testing, gates y riesgos residuales
-1.0.0	2026-11-12	Corrección de verificación: estrictitud Pydantic recursiva, defusedxml endurecido, invariante de suma en cobertura, verificación de cleanup con killpg, cola acotada del writer, gates de CI adicionales y riesgos residuales ampliados
-1.1.0	2026-11-12	Cierre de cabos sueltos: module_kind y contrato de policy nodes (ADR-017); namespaces de templates y orden de resolución (ADR-018); contrato de scope_validate con discovered_hostname → authorized_hostname y on_out_of_scope; NetworkEvidenceRecord y pinning_status (ADR-019); política on_node_failure con tres variantes (ADR-020); exit code 9 para recuperación pendiente; protocolo de reconciliación recover con orphan_artifacts y no borrado por defecto; invariante de cobertura ampliada a failed_targets; riesgos residuales 13 y 14
+1.0.0	2026-11-12	Corrección: estrictitud Pydantic recursiva, defusedxml endurecido, invariante de suma en cobertura, verificación de cleanup con killpg, cola acotada del writer, gates de CI adicionales y riesgos residuales ampliados
+1.1.0	2026-11-12	Cierre de cabos sueltos: module_kind y policy nodes (ADR-017); namespaces de templates (ADR-018); contrato de scope_validate; NetworkEvidenceRecord y pinning_status (ADR-019); on_node_failure con tres variantes (ADR-020); exit code 9; protocolo de reconciliación recover; invariante de cobertura ampliada a failed_targets
+1.2.0	2026-11-12	Versión final verificada. Se refuerza con referencias explícitas a OWASP SSRF/DNS rebinding, la no-recursividad de Pydantic v2, la seguridad de create_subprocess_exec frente a shell=True, el patrón de writer único con cola acotada y los defaults de defusedxml. Se fija Python 3.12+ como versión mínima recomendada. Documento cerrado para implementación.
 25. Referencias técnicas oficiales
 Python asyncio subprocess: https://docs.python.org/3/library/asyncio-subprocess.html
 
@@ -1653,13 +1653,17 @@ Python asyncio tasks/cancellation: https://docs.python.org/3/library/asyncio-tas
 
 Pydantic strict mode: https://docs.pydantic.dev/latest/concepts/strict_mode/
 
+Pydantic v2 — estrictitud no recursiva (confirmación): 
+
 SQLite WAL: https://www.sqlite.org/wal.html
 
 SQLite foreign keys: https://www.sqlite.org/foreignkeys.html
 
 SQLite transactions: https://www.sqlite.org/lang_transaction.html
 
-Python packaging / pyproject: https://packaging.python.org/en/latest/specifications/pyproject-toml/
+SQLite single writer con cola acotada (confirmación): 
+
+Python packaging / pyproject.toml: https://packaging.python.org/en/latest/specifications/pyproject-toml/
 
 Nmap XML output: https://nmap.org/book/output-formats-xml-output.html
 
@@ -1667,11 +1671,13 @@ ProjectDiscovery Subfinder: https://github.com/projectdiscovery/subfinder
 
 ProjectDiscovery Httpx: https://github.com/projectdiscovery/httpx
 
-OWASP SSRF Prevention Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html
+OWASP SSRF Prevention Cheat Sheet — DNS rebinding y validación de IP: 
 
-defusedxml documentation: https://pypi.org/project/defusedxml/
+defusedxml documentation — defaults de forbid_dtd/forbid_entities: 
 
-PEP 787 (t-strings para subprocess/shlex): https://peps.python.org/pep-0787/
+asyncio.create_subprocess_exec vs shell=True (confirmación): 
+
+PEP 787 (t-strings para subprocess/shlex): https://peps.python.org/pep-0787/ (objetivo Python 3.15)
 
 Las referencias son documentación de apoyo; deben consultarse contra las versiones concretas fijadas por el proyecto.
 
@@ -1680,4 +1686,5 @@ Northstar debe avanzar con una regla simple:
 
 Primero contratos e invariantes; después implementación; luego pruebas; finalmente funcionalidades.
 
-Este documento es el baseline arquitectónico propuesto para Northstar 1.1.0. La implementación solo podrá considerarse verificada cuando el repositorio real cumpla sus contratos y supere los gates definidos.
+Este documento es el baseline arquitectónico propuesto para Northstar 1.2.0, la primera versión cerrada, verificada y lista para implementarse. La implementación solo podrá considerarse verificada cuando el repositorio real cumpla sus contratos y supere los gates definidos.
+
